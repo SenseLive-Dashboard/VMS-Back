@@ -118,17 +118,30 @@ async function getProcessedVisitLogs(req, res) {
         visitors.first_name,
         visitors.last_name,
         visitors.email AS company_email,
+        visitors.company AS company,
         vlogs.department_id,
         vlogs.visit_date,
         vlogs.visit_type,
+
+        -- Status derived from manager and security approvals
+        CASE
+          WHEN vlogs.manager_approval = TRUE AND vlogs.security_approval = TRUE THEN 'Approved'
+          WHEN vlogs.manager_approval = TRUE AND (vlogs.security_approval IS NULL OR vlogs.security_approval = FALSE) THEN 'Pending'
+          WHEN vlogs.manager_approval = FALSE THEN 'Rejected'
+          ELSE 'Pending'
+        END AS status,
+
+        -- Visit status based on check-in/out timestamps
         CASE
           WHEN vlogs.check_in_time IS NULL AND vlogs.check_out_time IS NULL THEN 'Not Visited Yet'
           WHEN vlogs.check_in_time IS NOT NULL AND vlogs.check_out_time IS NULL THEN 'Checked In Only'
           WHEN vlogs.check_in_time IS NOT NULL AND vlogs.check_out_time IS NOT NULL THEN 'Checked Out'
           ELSE 'Unknown'
         END AS visit_status,
+
         vlogs.check_in_time,
         vlogs.check_out_time
+
       FROM "VMS".vms_visit_logs vlogs
       INNER JOIN "VMS".vms_visitors visitors ON vlogs.visitor_id = visitors.visitor_id
       ORDER BY vlogs.visit_date DESC, vlogs.check_in_time DESC;
@@ -137,7 +150,7 @@ async function getProcessedVisitLogs(req, res) {
     const result = await db.query(query);
 
     res.status(200).json({
-      message: 'Visit logs with status fetched successfully',
+      message: 'Visit logs with approval and visit status fetched successfully',
       data: result.rows
     });
   } catch (error) {
@@ -145,6 +158,7 @@ async function getProcessedVisitLogs(req, res) {
     res.status(500).json({ message: 'Internal server error' });
   }
 }
+
 
 module.exports = {
   getUsers,

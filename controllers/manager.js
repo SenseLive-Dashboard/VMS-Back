@@ -2,7 +2,7 @@ const db = require('../config/db');
 const { v4: uuidv4 } = require('uuid');
 
 // Check if visitor exists by email or contact
-async function findOrCreateVisitor(first_name, last_name, email, contact_number) {
+async function findOrCreateVisitor(first_name, last_name, email, contact_number, company) {
     const query = `
         SELECT visitor_id FROM "VMS".vms_visitors
         WHERE email = $1 OR contact_number = $2
@@ -15,8 +15,8 @@ async function findOrCreateVisitor(first_name, last_name, email, contact_number)
     }
 
     const insertQuery = `
-        INSERT INTO "VMS".vms_visitors (visitor_id, first_name, last_name, email, contact_number)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO "VMS".vms_visitors (visitor_id, first_name, last_name, email, contact_number, company)
+        VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING visitor_id
     `;
 
@@ -26,7 +26,8 @@ async function findOrCreateVisitor(first_name, last_name, email, contact_number)
         first_name,
         last_name,
         email,
-        contact_number
+        contact_number,
+        company
     ]);
     return insertResult.rows[0].visitor_id;
 }
@@ -44,10 +45,11 @@ async function logVisit(req, res) {
       department_id,
       visiting_user_id,
       purpose,
-      visit_type
+      visit_type,
+      company
     } = req.body;
 
-    const visitor_id = await findOrCreateVisitor(first_name, last_name, email, contact_number);
+    const visitor_id = await findOrCreateVisitor(first_name, last_name, email, contact_number, company);
 
     const manager_approval = visit_type === 'planned' ? true : null;
 
