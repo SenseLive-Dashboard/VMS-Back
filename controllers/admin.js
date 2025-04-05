@@ -72,11 +72,25 @@ async function getVisitAnalytics(req, res) {
       GROUP BY status
     `;
 
+    const TotalVisitorsQuery = `
+      SELECT COUNT(*) AS count
+      FROM "VMS".vms_visitors
+    `;
+
+    const CheckInQuery = `
+      SELECT COUNT(*) AS currently_checked_in
+      FROM "VMS".vms_visit_logs
+      WHERE check_in_time IS NOT NULL
+      AND check_out_time IS NULL;
+    `;
+
     // Run all queries in parallel
-    const [visitTypeResult, departmentResult, approvalStatusResult] = await Promise.all([
+    const [visitTypeResult, departmentResult, approvalStatusResult, TotalVisitorsResult, CheckInResult] = await Promise.all([
       db.query(visitTypeQuery),
       db.query(departmentCountQuery),
-      db.query(approvalStatusQuery)
+      db.query(approvalStatusQuery),
+      db.query(TotalVisitorsQuery),
+      db.query(CheckInQuery)
     ]);
 
     res.status(200).json({
@@ -84,7 +98,9 @@ async function getVisitAnalytics(req, res) {
       data: {
         visitTypeCounts: visitTypeResult.rows,
         departmentCounts: departmentResult.rows,
-        approvalStatusCounts: approvalStatusResult.rows
+        approvalStatusCounts: approvalStatusResult.rows,
+        totalVisitors: TotalVisitorsResult.rows[0].count,
+        CheckIn: CheckInResult.rows[0].currently_checked_in,
       }
     });
 
@@ -94,9 +110,45 @@ async function getVisitAnalytics(req, res) {
   }
 }
 
+async function getProcessedVisitLogs(req, res) {
+  try {
+    const query = `
+      SELECT 
+        vlogs.visit_id AS visit_log_id,
+        visitors.first_name,
+        visitors.last_name,
+        visitors.email AS company_email,
+        vlogs.department_id,
+        vlogs.visit_date,
+        vlogs.visit_type,
+        CASE
+          WHEN vlogs.check_in_time IS NULL AND vlogs.check_out_time IS NULL THEN 'Not Visited Yet'
+          WHEN vlogs.check_in_time IS NOT NULL AND vlogs.check_out_time IS NULL THEN 'Checked In Only'
+          WHEN vlogs.check_in_time IS NOT NULL AND vlogs.check_out_time IS NOT NULL THEN 'Checked Out'
+          ELSE 'Unknown'
+        END AS visit_status,
+        vlogs.check_in_time,
+        vlogs.check_out_time
+      FROM "VMS".vms_visit_logs vlogs
+      INNER JOIN "VMS".vms_visitors visitors ON vlogs.visitor_id = visitors.visitor_id
+      ORDER BY vlogs.visit_date DESC, vlogs.check_in_time DESC;
+    `;
+
+    const result = await db.query(query);
+
+    res.status(200).json({
+      message: 'Visit logs with status fetched successfully',
+      data: result.rows
+    });
+  } catch (error) {
+    console.error('Error fetching visit logs:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+}
 
 module.exports = {
   getUsers,
   getAllDepartments,
-  getVisitAnalytics
+  getVisitAnalytics,
+  getProcessedVisitLogs
 };
