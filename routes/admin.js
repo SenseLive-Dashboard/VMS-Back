@@ -7,4 +7,5 @@ router.get('/users', authenticateUser, admin.getUsers);
 router.get('/departments', authenticateUser, admin.getAllDepartments);
 router.get('/analytics', admin.getVisitAnalytics);
 router.get('/visit-logs', authenticateUser, admin.getProcessedVisitLogs);
+
 module.exports = router;

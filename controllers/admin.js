@@ -126,13 +126,14 @@ async function getProcessedVisitLogs(req, res) {
         -- Status derived from manager and security approvals
         CASE
           WHEN vlogs.manager_approval = TRUE AND vlogs.security_approval = TRUE THEN 'Approved'
-          WHEN vlogs.manager_approval = TRUE AND (vlogs.security_approval IS NULL OR vlogs.security_approval = FALSE) THEN 'Pending'
-          WHEN vlogs.manager_approval = FALSE THEN 'Rejected'
+          WHEN vlogs.manager_approval = FALSE OR vlogs.security_approval = FALSE THEN 'Rejected'
           ELSE 'Pending'
         END AS status,
 
+
         -- Visit status based on check-in/out timestamps
         CASE
+          WHEN vlogs.manager_approval = FALSE OR vlogs.security_approval = FALSE THEN 'Rejected'
           WHEN vlogs.check_in_time IS NULL AND vlogs.check_out_time IS NULL THEN 'Not Visited Yet'
           WHEN vlogs.check_in_time IS NOT NULL AND vlogs.check_out_time IS NULL THEN 'Checked In Only'
           WHEN vlogs.check_in_time IS NOT NULL AND vlogs.check_out_time IS NOT NULL THEN 'Checked Out'

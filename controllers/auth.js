@@ -113,10 +113,87 @@ async function login(req, res) {
 function getUserDetails(req, res) {
     const user = req.user;
     res.json({ user });
-  }
-  
+}
+
+// PUT /api/users/:id
+async function updateUser(req, res) {
+    try {
+        const { id } = req.params;
+        const {
+            first_name,
+            last_name,
+            role,
+            phone,
+            department_id,
+            password,
+            designation
+        } = req.body;
+
+        const validRoles = ['manager', 'security', 'admin'];
+        if (role && !validRoles.includes(role)) {
+            return res.status(400).json({ message: 'Invalid role specified.' });
+        }
+
+        // Check if user exists
+        const userExistsQuery = 'SELECT 1 FROM "VMS".vms_users WHERE user_id = $1';
+        const userExistsResult = await db.query(userExistsQuery, [id]);
+
+        if (userExistsResult.rowCount === 0) {
+            return res.status(404).json({ message: 'User not found.' });
+        }
+
+        // Check if department is valid (if provided)
+        if (department_id) {
+            const deptCheck = await db.query(
+                'SELECT 1 FROM "VMS".vms_departments WHERE department_id = $1',
+                [department_id]
+            );
+            if (deptCheck.rowCount === 0) {
+                return res.status(400).json({ message: 'Invalid department ID.' });
+            }
+        }
+
+        // Prepare fields and values for dynamic SQL
+        const fields = [];
+        const values = [];
+        let idx = 1;
+
+        if (first_name) { fields.push(`first_name = $${idx++}`); values.push(first_name); }
+        if (last_name) { fields.push(`last_name = $${idx++}`); values.push(last_name); }
+        if (role) { fields.push(`role = $${idx++}`); values.push(role); }
+        if (phone) { fields.push(`phone = $${idx++}`); values.push(phone); }
+        if (department_id) { fields.push(`department_id = $${idx++}`); values.push(department_id); }
+        if (designation) { fields.push(`designation = $${idx++}`); values.push(designation); }
+        if (password) {
+            const hashedPassword = await bcrypt.hash(password, 10);
+            fields.push(`password_hash = $${idx++}`);
+            values.push(hashedPassword);
+        }
+
+        if (fields.length === 0) {
+            return res.status(400).json({ message: 'No fields provided for update.' });
+        }
+
+        const updateQuery = `
+            UPDATE "VMS".vms_users
+            SET ${fields.join(', ')}
+            WHERE user_id = $${idx}
+        `;
+        values.push(id);
+
+        await db.query(updateQuery, values);
+
+        res.status(200).json({ message: 'User updated successfully.' });
+    } catch (error) {
+        console.error('Error in updateUser:', error);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+}
+
+
 module.exports = {
     register,
     login,
-    getUserDetails
+    getUserDetails,
+    updateUser
 };
