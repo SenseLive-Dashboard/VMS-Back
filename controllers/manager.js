@@ -1,25 +1,64 @@
 const db = require('../config/db');
 const { v4: uuidv4 } = require('uuid');
 
-// Check if visitor exists by email or contact
 async function findOrCreateVisitor(first_name, last_name, email, contact_number, company) {
     const query = `
-        SELECT visitor_id FROM "VMS".vms_visitors
+        SELECT * FROM "VMS".vms_visitors
         WHERE email = $1 OR contact_number = $2
         LIMIT 1
     `;
     const result = await db.query(query, [email, contact_number]);
 
     if (result.rows.length > 0) {
-        return result.rows[0].visitor_id;
+        const existingVisitor = result.rows[0];
+        const updates = [];
+        const values = [];
+        let index = 1;
+
+        if ((!existingVisitor.first_name || existingVisitor.first_name.trim() === '') && first_name) {
+            updates.push(`first_name = $${index++}`);
+            values.push(first_name);
+        }
+
+        if ((!existingVisitor.last_name || existingVisitor.last_name.trim() === '') && last_name) {
+            updates.push(`last_name = $${index++}`);
+            values.push(last_name);
+        }
+
+        if ((!existingVisitor.email || existingVisitor.email.trim() === '') && email) {
+            updates.push(`email = $${index++}`);
+            values.push(email);
+        }
+
+        if ((!existingVisitor.contact_number || existingVisitor.contact_number.trim() === '') && contact_number) {
+            updates.push(`contact_number = $${index++}`);
+            values.push(contact_number);
+        }
+
+        if ((!existingVisitor.company || existingVisitor.company.trim() === '') && company) {
+            updates.push(`company = $${index++}`);
+            values.push(company);
+        }
+
+        if (updates.length > 0) {
+            const updateQuery = `
+                UPDATE "VMS".vms_visitors
+                SET ${updates.join(', ')}
+                WHERE visitor_id = $${index}
+            `;
+            values.push(existingVisitor.visitor_id);
+            await db.query(updateQuery, values);
+        }
+
+        return existingVisitor.visitor_id;
     }
 
+    // Create new visitor
     const insertQuery = `
         INSERT INTO "VMS".vms_visitors (visitor_id, first_name, last_name, email, contact_number, company)
         VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING visitor_id
     `;
-
     const newVisitorId = uuidv4();
     const insertResult = await db.query(insertQuery, [
         newVisitorId,
@@ -29,8 +68,10 @@ async function findOrCreateVisitor(first_name, last_name, email, contact_number,
         contact_number,
         company
     ]);
+
     return insertResult.rows[0].visitor_id;
 }
+
 
 // Log a visit
 async function logVisit(req, res) {
@@ -93,30 +134,10 @@ async function getAllVisitors(req, res) {
     }
 }
 
-// Get all visit logs
-async function getAllVisitLogs(req, res) {
-    try {
-        const result = await db.query(`
-            SELECT v.*, 
-                    u.first_name AS host_first_name, 
-                    u.last_name AS host_last_name,
-                    d.department_name
-            FROM "VMS".vms_visit_logs v
-            LEFT JOIN "VMS".vms_users u ON v.visiting_user_id = u.user_id
-            LEFT JOIN "VMS".vms_departments d ON v.department_id = d.department_id
-            ORDER BY v.visit_date DESC
-            `);
-        res.json({ visits: result.rows });
-    } catch (error) {
-        console.error('Error fetching visits:', error);
-        res.status(500).json({ message: 'Internal server error' });
-    }
-}
 
-
-async function getUnplannedVisitsByUser(req, res) {
+async function getProcessedVisitRequests(req, res) {
   try {
-    const userId = req.user.user_id;
+    const { department_id, user_id } = req.user;
 
     const query = `
       SELECT 
@@ -130,24 +151,154 @@ async function getUnplannedVisitsByUser(req, res) {
         vlogs.visit_date,
         vlogs.visit_type,
         vlogs.purpose,
-        vlogs.accompanying_persons
+        vlogs.accompanying_persons,
+
+        -- Status derived from manager and security approvals
+        CASE
+          WHEN vlogs.manager_approval = TRUE AND vlogs.security_approval = TRUE THEN 'Approved'
+          WHEN vlogs.manager_approval = FALSE OR vlogs.security_approval = FALSE THEN 'Rejected'
+          ELSE 'Pending'
+        END AS status
+
       FROM "VMS".vms_visit_logs vlogs
       INNER JOIN "VMS".vms_visitors visitors ON vlogs.visitor_id = visitors.visitor_id
-      WHERE 
-        vlogs.visiting_user_id = $1
+      WHERE vlogs.department_id = $1
+        AND vlogs.visiting_user_id = $2
         AND vlogs.visit_type = 'unplanned'
         AND vlogs.manager_approval IS NULL
-      ORDER BY vlogs.visit_date DESC, vlogs.check_in_time DESC;
+      ORDER BY vlogs.visit_date DESC;
     `;
 
-    const result = await db.query(query, [userId]);
+    const result = await db.query(query, [department_id, user_id]);
 
     res.status(200).json({
       message: 'Filtered unplanned visit logs fetched successfully',
       data: result.rows
     });
   } catch (error) {
-    console.error('Error fetching unplanned visits by user:', error);
+    console.error('Error fetching visit logs:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+
+async function getProcessedVisitLogs(req, res) {
+  try {
+    const { department_id, user_id } = req.user;
+
+    const query = `
+      SELECT 
+        vlogs.visit_id AS visit_log_id,
+        visitors.first_name,
+        visitors.last_name,
+        visitors.email AS company_email,
+        visitors.company AS company,
+        visitors.contact_number as contact,
+        vlogs.department_id,
+        vlogs.visit_date,
+        vlogs.visit_type,
+        vlogs.purpose,
+        vlogs.accompanying_persons,
+
+        -- Status derived from manager and security approvals
+        CASE
+          WHEN vlogs.manager_approval = TRUE AND vlogs.security_approval = TRUE THEN 'Approved'
+          WHEN vlogs.manager_approval = FALSE OR vlogs.security_approval = FALSE THEN 'Rejected'
+          ELSE 'Pending'
+        END AS status
+
+      FROM "VMS".vms_visit_logs vlogs
+      INNER JOIN "VMS".vms_visitors visitors ON vlogs.visitor_id = visitors.visitor_id
+      WHERE vlogs.department_id = $1
+        AND vlogs.visiting_user_id = $2
+      ORDER BY vlogs.visit_date DESC;
+    `;
+
+    const result = await db.query(query, [department_id, user_id]);
+
+    res.status(200).json({
+      message: 'Filtered unplanned visit logs fetched successfully',
+      data: result.rows
+    });
+  } catch (error) {
+    console.error('Error fetching visit logs:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+async function getManagerVisitAnalytics(req, res) {
+  try {
+    const managerId = req.user.user_id;
+    console.log(managerId);
+
+    const approvalStatusQuery = `
+      SELECT 
+        CASE 
+          WHEN manager_approval = TRUE AND security_approval = TRUE THEN 'Approved'
+          WHEN manager_approval = FALSE OR security_approval = FALSE THEN 'Rejected'
+          ELSE 'Pending'
+        END AS status,
+        COUNT(*) AS count
+      FROM "VMS".vms_visit_logs
+      WHERE visiting_user_id = $1
+      GROUP BY status
+    `;
+
+    const plannedUnplannedQuery = `
+      SELECT 
+        visit_type, 
+        COUNT(*) AS count
+      FROM "VMS".vms_visit_logs
+      WHERE visiting_user_id = $1
+      GROUP BY visit_type
+    `;
+
+    const distinctVisitorsQuery = `
+      SELECT COUNT(DISTINCT visitor_id) AS distinct_visitor_count
+      FROM "VMS".vms_visit_logs
+      WHERE visiting_user_id = $1
+    `;
+
+    const totalLogsQuery = `
+      SELECT COUNT(*) AS total_logs
+      FROM "VMS".vms_visit_logs
+      WHERE visiting_user_id = $1
+    `;
+
+    const pendingCountQuery = `
+      SELECT COUNT(*) AS pending_count
+      FROM "VMS".vms_visit_logs
+      WHERE visiting_user_id = $1
+      AND (manager_approval IS NULL OR security_approval IS NULL)
+    `;
+
+    const [
+      approvalStatusResult,
+      plannedUnplannedResult,
+      distinctVisitorsResult,
+      totalLogsResult,
+      pendingCountResult
+    ] = await Promise.all([
+      db.query(approvalStatusQuery, [managerId]),
+      db.query(plannedUnplannedQuery, [managerId]),
+      db.query(distinctVisitorsQuery, [managerId]),
+      db.query(totalLogsQuery, [managerId]),
+      db.query(pendingCountQuery, [managerId])
+    ]);
+
+    res.status(200).json({
+      message: 'Manager-specific visit analytics fetched successfully',
+      data: {
+        approvalStatusCounts: approvalStatusResult.rows,
+        plannedUnplannedCounts: plannedUnplannedResult.rows,
+        distinctVisitors: distinctVisitorsResult.rows[0].distinct_visitor_count,
+        totalLogs: totalLogsResult.rows[0].total_logs,
+        totalPending: pendingCountResult.rows[0].pending_count
+      }
+    });
+
+  } catch (error) {
+    console.error('Error fetching manager visit analytics:', error);
     res.status(500).json({ message: 'Internal server error' });
   }
 }
@@ -156,6 +307,7 @@ async function getUnplannedVisitsByUser(req, res) {
 module.exports = {
     logVisit,
     getAllVisitors,
-    getAllVisitLogs,
-    getUnplannedVisitsByUser
+    getProcessedVisitLogs,
+    getProcessedVisitRequests,
+    getManagerVisitAnalytics
 };
