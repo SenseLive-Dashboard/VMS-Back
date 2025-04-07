@@ -56,7 +56,7 @@ async function register(req, res) {
             designation
         ]);
 
-        res.status(201).json({
+        res.status(200).json({
             message: 'User registered successfully.',
             user_id: insertResult.rows[0].user_id,
         });
@@ -126,7 +126,8 @@ async function updateUser(req, res) {
             phone,
             department_id,
             password,
-            designation
+            designation,
+            email
         } = req.body;
 
         const validRoles = ['manager', 'security', 'admin'];
@@ -164,7 +165,10 @@ async function updateUser(req, res) {
         if (phone) { fields.push(`phone = $${idx++}`); values.push(phone); }
         if (department_id) { fields.push(`department_id = $${idx++}`); values.push(department_id); }
         if (designation) { fields.push(`designation = $${idx++}`); values.push(designation); }
-        if (password) {
+        if (email) {
+            fields.push(`email = $${idx++}`);
+            values.push(email);
+        } if (password) {
             const hashedPassword = await bcrypt.hash(password, 10);
             fields.push(`password_hash = $${idx++}`);
             values.push(hashedPassword);
