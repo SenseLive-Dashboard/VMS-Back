@@ -113,8 +113,49 @@ async function getAllVisitLogs(req, res) {
     }
 }
 
+
+async function getUnplannedVisitsByUser(req, res) {
+  try {
+    const userId = req.user.user_id;
+
+    const query = `
+      SELECT 
+        vlogs.visit_id AS visit_log_id,
+        visitors.first_name,
+        visitors.last_name,
+        visitors.email AS company_email,
+        visitors.company AS company,
+        visitors.contact_number as contact,
+        vlogs.department_id,
+        vlogs.visit_date,
+        vlogs.visit_type,
+        vlogs.purpose,
+        vlogs.accompanying_persons
+      FROM "VMS".vms_visit_logs vlogs
+      INNER JOIN "VMS".vms_visitors visitors ON vlogs.visitor_id = visitors.visitor_id
+      WHERE 
+        vlogs.visiting_user_id = $1
+        AND vlogs.visit_type = 'unplanned'
+        AND vlogs.manager_approval IS NULL
+      ORDER BY vlogs.visit_date DESC, vlogs.check_in_time DESC;
+    `;
+
+    const result = await db.query(query, [userId]);
+
+    res.status(200).json({
+      message: 'Filtered unplanned visit logs fetched successfully',
+      data: result.rows
+    });
+  } catch (error) {
+    console.error('Error fetching unplanned visits by user:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+
 module.exports = {
     logVisit,
     getAllVisitors,
-    getAllVisitLogs
+    getAllVisitLogs,
+    getUnplannedVisitsByUser
 };
