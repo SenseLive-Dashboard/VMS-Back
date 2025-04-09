@@ -29,7 +29,7 @@ app.use(cors({
 }));
 
 // Body parser and payload size limit
-app.use(express.json({ limit: '10kb' }));
+app.use(express.json({ limit: '100mb' }));
 
 // Data sanitization against NoSQL Injection
 app.use(mongoSanitize());
