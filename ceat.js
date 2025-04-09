@@ -5,7 +5,6 @@ const helmet = require('helmet');
 const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 const xssClean = require('xss-clean');
-const mongoSanitize = require('express-mongo-sanitize');
 const hpp = require('hpp');
 const morgan = require('morgan');
 require('dotenv').config();
@@ -30,9 +29,6 @@ app.use(cors({
 
 // Body parser and payload size limit
 app.use(express.json({ limit: '100mb' }));
-
-// Data sanitization against NoSQL Injection
-app.use(mongoSanitize());
 
 // Data sanitization against XSS
 app.use(xssClean());
