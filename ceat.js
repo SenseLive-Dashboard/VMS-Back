@@ -63,10 +63,10 @@ app.use(rateLimit({
 app.disable('x-powered-by');
 
 // Routes
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/admin', require('./routes/admin'));
-app.use('/api/manager', require('./routes/manager'));
-app.use('/api/security', require('./routes/security'));
+app.use('/ceat/auth', require('./routes/auth'));
+app.use('/ceat/admin', require('./routes/admin'));
+app.use('/ceat/manager', require('./routes/manager'));
+app.use('/ceat/security', require('./routes/security'));
 
 // 404 Handler
 app.use((req, res) => {
