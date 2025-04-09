@@ -23,7 +23,7 @@ app.use(helmet());
 
 // Enable CORS with restrictions
 app.use(cors({
-  origin: 'https://ceat.senselive.io', // Change to allowed domain(s)
+  origin: 'https://ceat-visit.senselive.io', // Change to allowed domain(s)
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
