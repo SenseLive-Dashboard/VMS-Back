@@ -13,5 +13,5 @@ app.use('/api/security', require('./routes/security'));
 
 
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 3006;
 app.listen(PORT, () => console.log(`Server started on port ${PORT}`));
