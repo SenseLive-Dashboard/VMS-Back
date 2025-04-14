@@ -6,7 +6,7 @@ async function getUsers(req, res) {
 
     let query = `
       SELECT 
-        user_id, first_name, last_name, email, role, phone, department_id, designation
+        user_id, first_name, last_name, email, role, phone, department_id, designation,status
       FROM 
         "VMS".vms_users
     `;
