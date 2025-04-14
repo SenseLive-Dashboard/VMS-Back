@@ -109,7 +109,7 @@ async function login(req, res) {
     }
 }
 
-async function getUserDetails(req, res) {
+async function getUser(req, res) {
     try {
         const userId = req.user.user_id; // make sure user is authenticated
 
@@ -131,10 +131,10 @@ async function getUserDetails(req, res) {
     }
 }
 
-// function getUserDetails(req, res) {
-//     const user = req.user;
-//     res.json({ user });
-// }
+function getUserDetails(req, res) {
+    const user = req.user;
+    res.json({ user });
+}
 
 
 // PUT /api/users/:id
@@ -221,5 +221,6 @@ module.exports = {
     register,
     login,
     getUserDetails,
-    updateUser
+    updateUser,
+    getUser
 };
