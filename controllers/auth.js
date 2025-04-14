@@ -14,6 +14,7 @@ async function register(req, res) {
             department_id,
             password,
             designation,
+            status
         } = req.body;
 
         const validRoles = ['manager', 'security', 'admin'];
@@ -39,9 +40,9 @@ async function register(req, res) {
 
         const insertQuery = `
         INSERT INTO "VMS".vms_users 
-          (first_name, last_name, email, role, phone, department_id, password_hash, designation)
+          (first_name, last_name, email, role, phone, department_id, password_hash, designation,status)
         VALUES 
-          ($1, $2, $3, $4, $5, $6, $7, $8)
+          ($1, $2, $3, $4, $5, $6, $7, $8,$9)
         RETURNING user_id
       `;
 
@@ -53,7 +54,8 @@ async function register(req, res) {
             phone,
             department_id,
             hashedPassword,
-            designation
+            designation,
+            status
         ]);
 
         res.status(200).json({
@@ -149,7 +151,8 @@ async function updateUser(req, res) {
             department_id,
             password,
             designation,
-            email
+            email,
+            status
         } = req.body;
 
         const validRoles = ['manager', 'security', 'admin'];
@@ -187,6 +190,7 @@ async function updateUser(req, res) {
         if (phone) { fields.push(`phone = $${idx++}`); values.push(phone); }
         if (department_id) { fields.push(`department_id = $${idx++}`); values.push(department_id); }
         if (designation) { fields.push(`designation = $${idx++}`); values.push(designation); }
+        if (status) { fields.push(`status = $${idx++}`); values.push(status); }
         if (email) {
             fields.push(`email = $${idx++}`);
             values.push(email);
