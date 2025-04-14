@@ -109,11 +109,33 @@ async function login(req, res) {
     }
 }
 
+async function getUserDetails(req, res) {
+    try {
+        const userId = req.user.user_id; // make sure user is authenticated
 
-function getUserDetails(req, res) {
-    const user = req.user;
-    res.json({ user });
+        if (!userId) {
+            return res.status(401).json({ message: 'Unauthorized. User ID missing.' });
+        }
+
+        const query = `SELECT * FROM "VMS".vms_users WHERE user_id = $1`;
+        const { rows } = await db.query(query, [userId]);
+
+        if (rows.length === 0) {
+            return res.status(404).json({ message: 'User not found.' });
+        }
+
+        res.status(200).json({ user: rows[0] });
+    } catch (error) {
+        console.error('Error fetching user details:', error);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
 }
+
+// function getUserDetails(req, res) {
+//     const user = req.user;
+//     res.json({ user });
+// }
+
 
 // PUT /api/users/:id
 async function updateUser(req, res) {
