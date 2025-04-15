@@ -43,11 +43,84 @@ async function getAllDepartments(req, res) {
   }
 }
 
+// async function getVisitAnalytics(req, res) {
+//   try {
+//     const visitTypeQuery = `
+//       SELECT visit_type, COUNT(*) AS count
+//       FROM "VMS".vms_visit_logs
+//       GROUP BY visit_type
+//     `;
+
+//     const departmentCountQuery = `
+//       SELECT 
+//         d.department_name, 
+//         COUNT(v.visit_id) AS visit_count
+//       FROM "VMS".vms_visit_logs v
+//       LEFT JOIN "VMS".vms_departments d ON v.department_id = d.department_id
+//       GROUP BY d.department_name
+//     `;
+
+//     const approvalStatusQuery = `
+//       SELECT 
+//         CASE 
+//           WHEN manager_approval = TRUE AND security_approval = TRUE THEN 'Approved'
+//           WHEN manager_approval = FALSE OR security_approval = FALSE THEN 'Rejected'
+//           ELSE 'Pending'
+//         END AS status,
+//         COUNT(*) AS count
+//       FROM "VMS".vms_visit_logs
+//       GROUP BY status
+//     `;
+
+//     const TotalVisitorsQuery = `
+//       SELECT COUNT(*) AS count
+//       FROM "VMS".vms_visitors
+//     `;
+
+//     const CheckInQuery = `
+//       SELECT COUNT(*) AS currently_checked_in
+//       FROM "VMS".vms_visit_logs
+//       WHERE check_in_time IS NOT NULL
+//       AND check_out_time IS NULL;
+//     `;
+
+//     // Run all queries in parallel
+//     const [visitTypeResult, departmentResult, approvalStatusResult, TotalVisitorsResult, CheckInResult] = await Promise.all([
+//       db.query(visitTypeQuery),
+//       db.query(departmentCountQuery),
+//       db.query(approvalStatusQuery),
+//       db.query(TotalVisitorsQuery),
+//       db.query(CheckInQuery)
+//     ]);
+
+//     res.status(200).json({
+//       message: 'Visit analytics fetched successfully',
+//       data: {
+//         visitTypeCounts: visitTypeResult.rows,
+//         departmentCounts: departmentResult.rows,
+//         approvalStatusCounts: approvalStatusResult.rows,
+//         totalVisitors: TotalVisitorsResult.rows[0].count,
+//         CheckIn: CheckInResult.rows[0].currently_checked_in,
+//       }
+//     });
+
+//   } catch (error) {
+//     console.error('Error fetching visit analytics:', error);
+//     res.status(500).json({ message: 'Internal server error' });
+//   }
+// }
 async function getVisitAnalytics(req, res) {
   try {
+    const { start_date, end_date } = req.query;
+
+    if (!start_date || !end_date) {
+      return res.status(400).json({ message: 'Start and end date are required' });
+    }
+
     const visitTypeQuery = `
       SELECT visit_type, COUNT(*) AS count
       FROM "VMS".vms_visit_logs
+      WHERE visit_date BETWEEN $1 AND $2
       GROUP BY visit_type
     `;
 
@@ -57,6 +130,7 @@ async function getVisitAnalytics(req, res) {
         COUNT(v.visit_id) AS visit_count
       FROM "VMS".vms_visit_logs v
       LEFT JOIN "VMS".vms_departments d ON v.department_id = d.department_id
+      WHERE visit_date BETWEEN $1 AND $2
       GROUP BY d.department_name
     `;
 
@@ -69,28 +143,52 @@ async function getVisitAnalytics(req, res) {
         END AS status,
         COUNT(*) AS count
       FROM "VMS".vms_visit_logs
+      WHERE visit_date BETWEEN $1 AND $2
       GROUP BY status
     `;
 
-    const TotalVisitorsQuery = `
+    const totalVisitsQuery = `
+      SELECT COUNT(*) AS count
+      FROM "VMS".vms_visit_logs
+      WHERE visit_date BETWEEN $1 AND $2
+    `;
+
+    const totalRegisteredVisitorsQuery = `
       SELECT COUNT(*) AS count
       FROM "VMS".vms_visitors
     `;
 
-    const CheckInQuery = `
+    const currentlyCheckedInQuery = `
       SELECT COUNT(*) AS currently_checked_in
       FROM "VMS".vms_visit_logs
       WHERE check_in_time IS NOT NULL
-      AND check_out_time IS NULL;
+      AND check_out_time IS NULL
     `;
 
-    // Run all queries in parallel
-    const [visitTypeResult, departmentResult, approvalStatusResult, TotalVisitorsResult, CheckInResult] = await Promise.all([
-      db.query(visitTypeQuery),
-      db.query(departmentCountQuery),
-      db.query(approvalStatusQuery),
-      db.query(TotalVisitorsQuery),
-      db.query(CheckInQuery)
+    const pendingApprovalsQuery = `
+      SELECT COUNT(*) AS pending_count
+      FROM "VMS".vms_visit_logs
+      WHERE 
+        (manager_approval IS DISTINCT FROM TRUE OR security_approval IS DISTINCT FROM TRUE)
+        AND visit_date >= CURRENT_DATE - INTERVAL '3 days'
+    `;
+
+    const [
+      visitTypeResult,
+      departmentResult,
+      approvalStatusResult,
+      totalVisitsResult,
+      totalRegisteredVisitorsResult,
+      currentlyCheckedInResult,
+      pendingApprovalsResult
+    ] = await Promise.all([
+      db.query(visitTypeQuery, [start_date, end_date]),
+      db.query(departmentCountQuery, [start_date, end_date]),
+      db.query(approvalStatusQuery, [start_date, end_date]),
+      db.query(totalVisitsQuery, [start_date, end_date]),
+      db.query(totalRegisteredVisitorsQuery),
+      db.query(currentlyCheckedInQuery),
+      db.query(pendingApprovalsQuery),
     ]);
 
     res.status(200).json({
@@ -99,8 +197,10 @@ async function getVisitAnalytics(req, res) {
         visitTypeCounts: visitTypeResult.rows,
         departmentCounts: departmentResult.rows,
         approvalStatusCounts: approvalStatusResult.rows,
-        totalVisitors: TotalVisitorsResult.rows[0].count,
-        CheckIn: CheckInResult.rows[0].currently_checked_in,
+        totalVisitLogs: totalVisitsResult.rows[0].count,
+        totalRegisteredVisitors: totalRegisteredVisitorsResult.rows[0].count,
+        currentlyCheckedIn: currentlyCheckedInResult.rows[0].currently_checked_in,
+        pendingApprovalsInLast3Days: pendingApprovalsResult.rows[0].pending_count,
       }
     });
 
@@ -109,6 +209,7 @@ async function getVisitAnalytics(req, res) {
     res.status(500).json({ message: 'Internal server error' });
   }
 }
+
 
 async function getProcessedVisitLogs(req, res) {
   try {

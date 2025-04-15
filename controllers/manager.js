@@ -87,33 +87,45 @@ async function logVisit(req, res) {
       visiting_user_id,
       purpose,
       visit_type,
+      visitor_type,
+      location,
       company
     } = req.body;
 
     const visitor_id = await findOrCreateVisitor(first_name, last_name, email, contact_number, company);
 
     const manager_approval = visit_type === 'planned' ? true : null;
+    const manager_exit_approval = null; // default when entry is created
 
     const logQuery = `
       INSERT INTO "VMS".vms_visit_logs (
-        visit_id, visitor_id, visit_date, accompanying_persons,
-        department_id, visiting_user_id, purpose, visit_type, manager_approval
+        visit_id, visitor_id, visit_date, location, accompanying_persons,
+        department_id, visiting_user_id, purpose,
+        visit_type, visitor_type, manager_approval, manager_exit_approval
       )
-      VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9)
+      VALUES (
+        $1, $2, $3, $4, $5::jsonb,
+        $6, $7, $8,
+        $9, $10, $11, $12
+      )
       RETURNING visit_id
     `;
 
     const visit_id = uuidv4();
+
     await db.query(logQuery, [
       visit_id,
       visitor_id,
       visit_date,
-      JSON.stringify(accompanying_persons || []),
+      location || null,
+      JSON.stringify(accompanying_persons || {}),
       department_id,
       visiting_user_id,
       purpose,
       visit_type,
-      manager_approval
+      visitor_type || null,
+      manager_approval,
+      manager_exit_approval
     ]);
 
     res.status(201).json({ message: 'Visit logged successfully', visit_id });
@@ -122,6 +134,7 @@ async function logVisit(req, res) {
     res.status(500).json({ message: 'Internal server error' });
   }
 }
+
 
 // Get all visitors
 async function getAllVisitors(req, res) {
@@ -229,35 +242,6 @@ async function getProcessedVisitLogs(req, res) {
 async function getManagerVisitAnalytics(req, res) {
   try {
     const managerId = req.user.user_id;
-    console.log(managerId);
-
-    const approvalStatusQuery = `
-      SELECT 
-        CASE 
-          WHEN manager_approval = TRUE AND security_approval = TRUE THEN 'Approved'
-          WHEN manager_approval = FALSE OR security_approval = FALSE THEN 'Rejected'
-          ELSE 'Pending'
-        END AS status,
-        COUNT(*) AS count
-      FROM "VMS".vms_visit_logs
-      WHERE visiting_user_id = $1
-      GROUP BY status
-    `;
-
-    const plannedUnplannedQuery = `
-      SELECT 
-        visit_type, 
-        COUNT(*) AS count
-      FROM "VMS".vms_visit_logs
-      WHERE visiting_user_id = $1
-      GROUP BY visit_type
-    `;
-
-    const distinctVisitorsQuery = `
-      SELECT COUNT(DISTINCT visitor_id) AS distinct_visitor_count
-      FROM "VMS".vms_visit_logs
-      WHERE visiting_user_id = $1
-    `;
 
     const totalLogsQuery = `
       SELECT COUNT(*) AS total_logs
@@ -265,35 +249,84 @@ async function getManagerVisitAnalytics(req, res) {
       WHERE visiting_user_id = $1
     `;
 
-    const pendingCountQuery = `
-      SELECT COUNT(*) AS pending_count
+    const pendingApprovalsQuery = `
+      SELECT COUNT(*) AS pending_approvals
       FROM "VMS".vms_visit_logs
       WHERE visiting_user_id = $1
-      AND (manager_approval IS NULL OR security_approval IS NULL)
+      AND (manager_approval IS NULL OR manager_approval = FALSE)
+    `;
+
+    const currentlyCheckedInQuery = `
+      SELECT COUNT(*) AS currently_checked_in
+      FROM "VMS".vms_visit_logs
+      WHERE visiting_user_id = $1
+      AND manager_approval = TRUE
+      AND security_approval = TRUE
+      AND check_in_time IS NOT NULL
+      AND check_out_time IS NULL
+    `;
+
+    const approvalCountsQuery = `
+      SELECT 
+        COUNT(*) FILTER (WHERE manager_approval = TRUE) AS approved_count,
+        COUNT(*) FILTER (WHERE manager_approval = FALSE) AS rejected_count,
+        COUNT(*) FILTER (WHERE manager_approval IS NULL) AS pending_count
+      FROM "VMS".vms_visit_logs
+      WHERE visiting_user_id = $1
+    `;
+
+    const typeCountsQuery = `
+      SELECT 
+        COUNT(*) FILTER (WHERE visit_type = 'planned') AS planned_count,
+        COUNT(*) FILTER (WHERE visit_type = 'unplanned') AS unplanned_count
+      FROM "VMS".vms_visit_logs
+      WHERE visiting_user_id = $1
+    `;
+
+    const checkedInUserDetailsQuery = `
+      SELECT 
+        vvl.visit_id,
+        vv.first_name AS visitor_first_name,
+        vv.last_name AS visitor_last_name,
+        vv.contact_number AS visitor_contact,
+        vv.email AS visitor_email,
+        vu.first_name AS visiting_user_first_name,
+        vu.last_name AS visiting_user_last_name,
+        vvl.check_in_time AS "visitDate"
+      FROM "VMS".vms_visit_logs vvl
+      JOIN "VMS".vms_visitors vv ON vvl.visitor_id = vv.visitor_id
+      JOIN "VMS".vms_users vu ON vvl.visiting_user_id = vu.user_id
+      WHERE vvl.visiting_user_id = $1
+        AND vvl.check_in_time IS NOT NULL
+        AND vvl.check_out_time IS NULL
+        AND (vvl.manager_exit_approval IS NULL OR vvl.manager_exit_approval = FALSE)
     `;
 
     const [
-      approvalStatusResult,
-      plannedUnplannedResult,
-      distinctVisitorsResult,
       totalLogsResult,
-      pendingCountResult
+      pendingApprovalsResult,
+      currentlyCheckedInResult,
+      approvalCountsResult,
+      typeCountsResult,
+      checkedInUserDetailsResult
     ] = await Promise.all([
-      db.query(approvalStatusQuery, [managerId]),
-      db.query(plannedUnplannedQuery, [managerId]),
-      db.query(distinctVisitorsQuery, [managerId]),
       db.query(totalLogsQuery, [managerId]),
-      db.query(pendingCountQuery, [managerId])
+      db.query(pendingApprovalsQuery, [managerId]),
+      db.query(currentlyCheckedInQuery, [managerId]),
+      db.query(approvalCountsQuery, [managerId]),
+      db.query(typeCountsQuery, [managerId]),
+      db.query(checkedInUserDetailsQuery, [managerId])
     ]);
 
     res.status(200).json({
-      message: 'Manager-specific visit analytics fetched successfully',
+      message: 'Manager dashboard analytics fetched successfully',
       data: {
-        approvalStatusCounts: approvalStatusResult.rows,
-        plannedUnplannedCounts: plannedUnplannedResult.rows,
-        distinctVisitors: distinctVisitorsResult.rows[0].distinct_visitor_count,
         totalLogs: totalLogsResult.rows[0].total_logs,
-        totalPending: pendingCountResult.rows[0].pending_count
+        pendingApprovals: pendingApprovalsResult.rows[0].pending_approvals,
+        currentlyCheckedIn: currentlyCheckedInResult.rows[0].currently_checked_in,
+        approvalCounts: approvalCountsResult.rows[0],
+        visitTypeCounts: typeCountsResult.rows[0],
+        checkedInVisitors: checkedInUserDetailsResult.rows
       }
     });
 
@@ -304,10 +337,112 @@ async function getManagerVisitAnalytics(req, res) {
 }
 
 
+async function approveVisitByManager(req, res) {
+  try {
+    const { visit_id } = req.params;
+    const { approval } = req.body;
+    
+
+    if (typeof approval !== "boolean") {
+      return res.status(400).json({ message: "Approval must be true or false" });
+    }
+
+    const checkQuery = `
+      SELECT security_approval 
+      FROM "VMS".vms_visit_logs 
+      WHERE visit_id = $1
+    `;
+    const checkResult = await db.query(checkQuery, [visit_id]);
+
+    if (checkResult.rowCount === 0) {
+      return res.status(404).json({ message: "Visit log not found" });
+    }
+
+    const { security_approval } = checkResult.rows[0];
+
+    if (approval === true && security_approval === true) {
+      return res.status(403).json({
+        message: "Cannot update. Visit already approved by security.",
+      });
+    }
+
+    const updateQuery = `
+      UPDATE "VMS".vms_visit_logs
+      SET 
+          manager_approval = $1
+      WHERE visit_id = $2
+      RETURNING visit_id, manager_approval
+    `;
+
+    await db.query(updateQuery, [approval, visit_id]);
+
+    res.status(200).json({
+      message: approval
+        ? "Visitor approved by manager."
+        : "Visitor rejected by manager.",
+    });
+  } catch (err) {
+    console.error("Manager approval error:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+}
+
+
+async function approveExitByManager(req, res) {
+  try {
+    const { visit_id } = req.params;
+    const { approval } = req.body;
+
+    if (typeof approval !== "boolean") {
+      return res.status(400).json({ message: "Approval must be true or false" });
+    }
+
+    const checkQuery = `
+      SELECT manager_exit_approval 
+      FROM "VMS".vms_visit_logs 
+      WHERE visit_id = $1
+    `;
+    const checkResult = await db.query(checkQuery, [visit_id]);
+
+    if (checkResult.rowCount === 0) {
+      return res.status(404).json({ message: "Visit log not found" });
+    }
+
+    const { manager_exit_approval } = checkResult.rows[0];
+
+    if (manager_exit_approval === true) {
+      return res.status(403).json({
+        message: "Exit already approved by manager.",
+      });
+    }
+
+    const updateQuery = `
+      UPDATE "VMS".vms_visit_logs
+      SET manager_exit_approval = $1
+      WHERE visit_id = $2
+      RETURNING visit_id, manager_exit_approval
+    `;
+
+    await db.query(updateQuery, [approval, visit_id]);
+
+    res.status(200).json({
+      message: approval
+        ? "Exit approved by manager."
+        : "Exit rejected by manager.",
+    });
+  } catch (err) {
+    console.error("Manager exit approval error:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+}
+
+
 module.exports = {
     logVisit,
     getAllVisitors,
     getProcessedVisitLogs,
     getProcessedVisitRequests,
-    getManagerVisitAnalytics
+    getManagerVisitAnalytics,
+    approveVisitByManager,
+    approveExitByManager
 };
