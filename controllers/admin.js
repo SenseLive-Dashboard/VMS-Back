@@ -119,6 +119,7 @@ async function getProcessedVisitLogs(req, res) {
       visitors.last_name,
       visitors.email AS company_email,
       visitors.company AS company,
+      visitors.contact_number as contact,
       vlogs.department_id,
         vlogs.purpose,
       vlogs.visit_date,
