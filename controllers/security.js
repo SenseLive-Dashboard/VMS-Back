@@ -95,7 +95,8 @@ async function getSecurityVisitAnalytics(req, res) {
           vv.email AS visitor_email,
           vu.first_name AS visiting_user_first_name,
           vu.last_name AS visiting_user_last_name,
-          vvl.check_in_time as "visitDate"
+          vvl.check_in_time as "visitDate",
+          vvl.manager_exit_approval AS exitApproval
         FROM "VMS".vms_visit_logs vvl
         JOIN "VMS".vms_visitors vv ON vvl.visitor_id = vv.visitor_id
         JOIN "VMS".vms_users vu ON vvl.visiting_user_id = vu.user_id

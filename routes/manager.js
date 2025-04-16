@@ -8,5 +8,7 @@ router.get('/visitors', authenticateUser, manager.getAllVisitors);
 router.get('/logs', authenticateUser, manager.getProcessedVisitLogs);
 router.get('/requests', authenticateUser, manager.getProcessedVisitRequests);
 router.get('/analytics', authenticateUser, manager.getManagerVisitAnalytics);
+router.put('/approve/:visit_id', authenticateUser, manager.approveVisitByManager);
+router.put('/check-out/:visit_id', authenticateUser, manager.approveExitByManager);
 
 module.exports = router;
