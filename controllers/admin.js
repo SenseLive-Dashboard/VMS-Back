@@ -212,6 +212,12 @@ async function getVisitAnalytics(req, res) {
 
 
 async function getProcessedVisitLogs(req, res) {
+  const { start_date, end_date } = req.query;
+
+  if (!start_date || !end_date) {
+    return res.status(400).json({ message: 'Start and end date are required' });
+  }
+
   try {
     const query = `
     SELECT 
@@ -249,11 +255,12 @@ async function getProcessedVisitLogs(req, res) {
       vlogs.check_out_time
   
     FROM "VMS".vms_visit_logs vlogs
+    visit_date BETWEEN $1 AND $2
     INNER JOIN "VMS".vms_visitors visitors ON vlogs.visitor_id = visitors.visitor_id
     LEFT JOIN "VMS".vms_users users ON vlogs.visiting_user_id = users.user_id
     ORDER BY vlogs.visit_date DESC, vlogs.check_in_time DESC;
   `;
-  
+
     const result = await db.query(query);
 
     res.status(200).json({

@@ -229,9 +229,7 @@ async function getProcessedVisitLogs(req, res) {
           vlogs.location,
           vlogs.visitor_type,
           CONCAT(users.first_name, ' ', users.last_name, ' (', users.designation, ')') AS whom_to_meet,
-          -- Person to meet (combined name)
-      CONCAT(users.first_name, ' ', users.last_name) AS meet_with,
-
+          
           -- Status derived from manager and security approvals
           CASE
             WHEN vlogs.manager_approval = TRUE AND vlogs.security_approval = TRUE THEN 'Approved'
@@ -242,8 +240,7 @@ async function getProcessedVisitLogs(req, res) {
         FROM "VMS".vms_visit_logs vlogs
         INNER JOIN "VMS".vms_visitors visitors ON vlogs.visitor_id = visitors.visitor_id
         LEFT JOIN "VMS".vms_users users ON vlogs.visiting_user_id = users.user_id
-         LEFT JOIN "VMS".vms_users users ON vlogs.visiting_user_id = users.user_id
-      WHERE vlogs.department_id = $1
+        WHERE vlogs.department_id = $1
           AND vlogs.visiting_user_id = $2
           AND DATE(vlogs.visit_date) BETWEEN $3 AND $4
         ORDER BY vlogs.visit_date DESC;
