@@ -92,6 +92,7 @@ async function getSecurityVisitAnalytics(req, res) {
           vv.first_name AS visitor_first_name,
           vv.last_name AS visitor_last_name,
           vv.contact_number AS visitor_contact,
+          vv.company AS company,
           vv.email AS visitor_email,
           vu.first_name AS visiting_user_first_name,
           vu.last_name AS visiting_user_last_name,
