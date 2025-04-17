@@ -155,11 +155,13 @@ async function getSecurityRequests(req, res) {
           vlogs.department_id,
           vlogs.visit_date,
           vlogs.visit_type,
+          vlogs.visitor_type,
           vlogs.purpose,
           vlogs.accompanying_persons,
 
           -- Person to meet (combined name)
-      CONCAT(users.first_name, ' ', users.last_name) AS meet_with,
+          CONCAT(users.first_name, ' ', users.last_name, ' (', users.designation, ')') AS whom_to_meet,
+          vlogs.location,
   
           -- Status derived from approvals
           CASE
