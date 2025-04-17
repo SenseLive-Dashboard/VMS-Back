@@ -182,42 +182,106 @@ async function getSecurityRequests(req, res) {
 }
 
 async function checkoutVisitor(req, res) {
-    try {
-      const { visit_log_id } = req.params;
-  
-      if (!visit_log_id) {
-        return res.status(400).json({ message: 'Visit log ID is required' });
-      }
-  
-      const query = `
+  try {
+    const { visit_log_id } = req.params;
+
+    if (!visit_log_id) {
+      return res.status(400).json({ message: 'Visit log ID is required' });
+    }
+
+    const query = `
         UPDATE "VMS".vms_visit_logs
         SET 
           check_out_time = NOW()
         WHERE visit_id = $1
         RETURNING visit_id, check_out_time;
       `;
-  
-      const result = await db.query(query, [visit_log_id]);
-  
-      if (result.rowCount === 0) {
-        return res.status(404).json({ message: 'Visit log not found or already checked out' });
-      }
-  
-      res.status(200).json({
-        message: 'Visitor checked out successfully',
-        data: result.rows[0]
-      });
-  
-    } catch (error) {
-      console.error('Error during checkout:', error);
-      res.status(500).json({ message: 'Internal server error' });
+
+    const result = await db.query(query, [visit_log_id]);
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: 'Visit log not found or already checked out' });
     }
+
+    res.status(200).json({
+      message: 'Visitor checked out successfully',
+      data: result.rows[0]
+    });
+
+  } catch (error) {
+    console.error('Error during checkout:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
+async function getProcessedVisitLogs(req, res) {
+  const { start_date, end_date } = req.query;
+
+  if (!start_date || !end_date) {
+    return res.status(400).json({ message: 'Start and end date are required' });
   }
 
-  
+  try {
+    const query = `
+      SELECT 
+        vlogs.visit_id AS visit_log_id,
+        visitors.first_name,
+        visitors.last_name,
+        visitors.email AS company_email,
+        visitors.company AS company,
+        visitors.contact_number AS contact,
+        vlogs.department_id,
+        vlogs.purpose,
+        vlogs.visit_date,
+        vlogs.visit_type,
+        vlogs.visitor_type,
+        vlogs.accompanying_persons,
+        vlogs.location,
+        vlogs.check_in_time,
+        vlogs.check_out_time,
+        vlogs.security_data,
+        CONCAT(users.first_name, ' ', users.last_name, ' (', users.designation, ')') AS whom_to_meet,
+
+        CASE
+          WHEN vlogs.manager_approval = TRUE AND vlogs.security_approval = TRUE THEN 'Approved'
+          WHEN vlogs.manager_approval = FALSE OR vlogs.security_approval = FALSE THEN 'Rejected'
+          ELSE 'Pending'
+        END AS status,
+
+        CASE
+          WHEN vlogs.manager_approval = FALSE OR vlogs.security_approval = FALSE THEN 'Rejected'
+          WHEN vlogs.check_in_time IS NULL AND vlogs.check_out_time IS NULL THEN 'Not Visited Yet'
+          WHEN vlogs.check_in_time IS NOT NULL AND vlogs.check_out_time IS NULL THEN 'Checked In Only'
+          WHEN vlogs.check_in_time IS NOT NULL AND vlogs.check_out_time IS NOT NULL THEN 'Checked Out'
+          ELSE 'Unknown'
+        END AS visit_status
+
+      FROM "VMS".vms_visit_logs vlogs
+      INNER JOIN "VMS".vms_visitors visitors ON vlogs.visitor_id = visitors.visitor_id
+      LEFT JOIN "VMS".vms_users users ON vlogs.visiting_user_id = users.user_id
+      WHERE vlogs.visit_date BETWEEN $1 AND $2
+        AND vlogs.manager_approval = TRUE
+        AND vlogs.security_approval = TRUE
+        AND vlogs.check_out_time IS NOT NULL
+      ORDER BY vlogs.visit_date DESC, vlogs.check_out_time DESC;
+    `;
+
+    const result = await db.query(query, [start_date, end_date]);
+
+    res.status(200).json({
+      message: 'Checked-out visit logs fetched successfully',
+      data: result.rows
+    });
+  } catch (error) {
+    console.error('Error fetching visit logs:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+}
+
 module.exports = {
   approveVisitBySecurity,
   getSecurityVisitAnalytics,
   getSecurityRequests,
-  checkoutVisitor
+  checkoutVisitor,
+  getProcessedVisitLogs
 };

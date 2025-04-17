@@ -7,5 +7,6 @@ router.put('/security-approve/:visit_id', authenticateUser, security.approveVisi
 router.get('/security-analytics', authenticateUser, security.getSecurityVisitAnalytics);
 router.get('/requests', authenticateUser, security.getSecurityRequests);
 router.put('/checkout/:visit_log_id', authenticateUser, security.checkoutVisitor);
+router.get('/processed-logs', authenticateUser, security.getProcessedVisitLogs);
 
 module.exports = router;

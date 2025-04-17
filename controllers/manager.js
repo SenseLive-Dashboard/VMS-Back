@@ -207,8 +207,6 @@ async function getProcessedVisitLogs(req, res) {
   try {
     const { department_id, user_id } = req.user;
     const { start, end } = req.query;
-    const dateFilter = `AND DATE(visit_date) BETWEEN $3 AND $4`;
-
 
     const query = `
         SELECT 

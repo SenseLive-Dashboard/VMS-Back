@@ -220,48 +220,47 @@ async function getProcessedVisitLogs(req, res) {
 
   try {
     const query = `
-    SELECT 
-      vlogs.visit_id AS visit_log_id,
-      visitors.first_name,
-      visitors.last_name,
-      visitors.email AS company_email,
-      visitors.company AS company,
-      visitors.contact_number as contact,
-      vlogs.department_id,
+      SELECT 
+        vlogs.visit_id AS visit_log_id,
+        visitors.first_name,
+        visitors.last_name,
+        visitors.email AS company_email,
+        visitors.company AS company,
+        visitors.contact_number AS contact,
+        vlogs.department_id,
         vlogs.purpose,
-      vlogs.visit_date,
-      vlogs.visit_type,
-  
-      -- Person to meet (combined name)
-      CONCAT(users.first_name, ' ', users.last_name) AS meet_with,
-  
-      -- Status derived from manager and security approvals
-      CASE
-        WHEN vlogs.manager_approval = TRUE AND vlogs.security_approval = TRUE THEN 'Approved'
-        WHEN vlogs.manager_approval = FALSE OR vlogs.security_approval = FALSE THEN 'Rejected'
-        ELSE 'Pending'
-      END AS status,
-  
-      -- Visit status based on check-in/out timestamps
-      CASE
-        WHEN vlogs.manager_approval = FALSE OR vlogs.security_approval = FALSE THEN 'Rejected'
-        WHEN vlogs.check_in_time IS NULL AND vlogs.check_out_time IS NULL THEN 'Not Visited Yet'
-        WHEN vlogs.check_in_time IS NOT NULL AND vlogs.check_out_time IS NULL THEN 'Checked In Only'
-        WHEN vlogs.check_in_time IS NOT NULL AND vlogs.check_out_time IS NOT NULL THEN 'Checked Out'
-        ELSE 'Unknown'
-      END AS visit_status,
-  
-      vlogs.check_in_time,
-      vlogs.check_out_time
-  
-    FROM "VMS".vms_visit_logs vlogs
-    visit_date BETWEEN $1 AND $2
-    INNER JOIN "VMS".vms_visitors visitors ON vlogs.visitor_id = visitors.visitor_id
-    LEFT JOIN "VMS".vms_users users ON vlogs.visiting_user_id = users.user_id
-    ORDER BY vlogs.visit_date DESC, vlogs.check_in_time DESC;
-  `;
+        vlogs.visit_date,
+        vlogs.visit_type,
+        vlogs.visitor_type,
+        vlogs.accompanying_persons,
+        vlogs.location,
+        vlogs.check_in_time,
+        vlogs.check_out_time,
+        vlogs.security_data,
+        CONCAT(users.first_name, ' ', users.last_name, ' (', users.designation, ')') AS whom_to_meet,
 
-    const result = await db.query(query);
+        CASE
+          WHEN vlogs.manager_approval = TRUE AND vlogs.security_approval = TRUE THEN 'Approved'
+          WHEN vlogs.manager_approval = FALSE OR vlogs.security_approval = FALSE THEN 'Rejected'
+          ELSE 'Pending'
+        END AS status,
+
+        CASE
+          WHEN vlogs.manager_approval = FALSE OR vlogs.security_approval = FALSE THEN 'Rejected'
+          WHEN vlogs.check_in_time IS NULL AND vlogs.check_out_time IS NULL THEN 'Not Visited Yet'
+          WHEN vlogs.check_in_time IS NOT NULL AND vlogs.check_out_time IS NULL THEN 'Checked In Only'
+          WHEN vlogs.check_in_time IS NOT NULL AND vlogs.check_out_time IS NOT NULL THEN 'Checked Out'
+          ELSE 'Unknown'
+        END AS visit_status
+
+      FROM "VMS".vms_visit_logs vlogs
+      INNER JOIN "VMS".vms_visitors visitors ON vlogs.visitor_id = visitors.visitor_id
+      LEFT JOIN "VMS".vms_users users ON vlogs.visiting_user_id = users.user_id
+      WHERE vlogs.visit_date BETWEEN $1 AND $2
+      ORDER BY vlogs.visit_date DESC, vlogs.check_in_time DESC;
+    `;
+
+    const result = await db.query(query, [start_date, end_date]);
 
     res.status(200).json({
       message: 'Visit logs with approval and visit status fetched successfully',
@@ -272,6 +271,7 @@ async function getProcessedVisitLogs(req, res) {
     res.status(500).json({ message: 'Internal server error' });
   }
 }
+
 
 
 module.exports = {
