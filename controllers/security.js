@@ -86,21 +86,29 @@ async function getSecurityVisitAnalytics(req, res) {
         WHERE check_in_time IS NOT NULL AND check_out_time IS NULL
       `;
 
-    const checkedInVisitorsListQuery = `
-        SELECT 
-          vvl.visit_id,
-          vv.first_name AS visitor_first_name,
-          vv.last_name AS visitor_last_name,
-          vv.contact_number AS visitor_contact,
-          vv.email AS visitor_email,
-          vu.first_name AS visiting_user_first_name,
-          vu.last_name AS visiting_user_last_name,
-          vvl.check_in_time as "visitDate"
-        FROM "VMS".vms_visit_logs vvl
-        JOIN "VMS".vms_visitors vv ON vvl.visitor_id = vv.visitor_id
-        JOIN "VMS".vms_users vu ON vvl.visiting_user_id = vu.user_id
-        WHERE vvl.check_in_time IS NOT NULL AND vvl.check_out_time IS NULL
-      `;
+      const checkedInVisitorsListQuery = `
+      SELECT 
+        vvl.visit_id,
+        vv.first_name AS visitor_first_name,
+        vv.last_name AS visitor_last_name,
+        vv.contact_number AS visitor_contact,
+        vv.email AS visitor_email,
+        vu.first_name AS visiting_user_first_name,
+        vu.last_name AS visiting_user_last_name,
+        vvl.check_in_time AS "visitDate",
+        vvl.purpose,
+        vvl.accompanying_persons,
+        CASE 
+          WHEN vvl.check_in_time IS NOT NULL AND vvl.check_out_time IS NULL THEN 'Checked In'
+          WHEN vvl.check_in_time IS NOT NULL AND vvl.check_out_time IS NOT NULL THEN 'Checked Out'
+          ELSE 'Pending'
+        END AS currentStatus
+      FROM "VMS".vms_visit_logs vvl
+      JOIN "VMS".vms_visitors vv ON vvl.visitor_id = vv.visitor_id
+      JOIN "VMS".vms_users vu ON vvl.visiting_user_id = vu.user_id
+      WHERE vvl.check_in_time IS NOT NULL AND vvl.check_out_time IS NULL
+    `;
+    
 
     const [
       todaysVisitorsResult,
