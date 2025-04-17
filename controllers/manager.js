@@ -165,6 +165,8 @@ async function getProcessedVisitRequests(req, res) {
         vlogs.visit_type,
         vlogs.purpose,
         vlogs.accompanying_persons,
+          -- Person to meet (combined name)
+      CONCAT(users.first_name, ' ', users.last_name) AS meet_with,
 
         -- Status derived from manager and security approvals
         CASE
@@ -175,6 +177,7 @@ async function getProcessedVisitRequests(req, res) {
 
       FROM "VMS".vms_visit_logs vlogs
       INNER JOIN "VMS".vms_visitors visitors ON vlogs.visitor_id = visitors.visitor_id
+      LEFT JOIN "VMS".vms_users users ON vlogs.visiting_user_id = users.user_id
       WHERE vlogs.department_id = $1
         AND vlogs.visiting_user_id = $2
         AND vlogs.visit_type = 'unplanned'
@@ -212,6 +215,8 @@ async function getProcessedVisitLogs(req, res) {
         vlogs.visit_type,
         vlogs.purpose,
         vlogs.accompanying_persons,
+          -- Person to meet (combined name)
+      CONCAT(users.first_name, ' ', users.last_name) AS meet_with,
 
         -- Status derived from manager and security approvals
         CASE
@@ -222,6 +227,7 @@ async function getProcessedVisitLogs(req, res) {
 
       FROM "VMS".vms_visit_logs vlogs
       INNER JOIN "VMS".vms_visitors visitors ON vlogs.visitor_id = visitors.visitor_id
+       LEFT JOIN "VMS".vms_users users ON vlogs.visiting_user_id = users.user_id
       WHERE vlogs.department_id = $1
         AND vlogs.visiting_user_id = $2
       ORDER BY vlogs.visit_date DESC;
