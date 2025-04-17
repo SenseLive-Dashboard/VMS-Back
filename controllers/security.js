@@ -157,6 +157,9 @@ async function getSecurityRequests(req, res) {
           vlogs.visit_type,
           vlogs.purpose,
           vlogs.accompanying_persons,
+
+          -- Person to meet (combined name)
+      CONCAT(users.first_name, ' ', users.last_name) AS meet_with,
   
           -- Status derived from approvals
           CASE
@@ -167,6 +170,7 @@ async function getSecurityRequests(req, res) {
   
         FROM "VMS".vms_visit_logs vlogs
         INNER JOIN "VMS".vms_visitors visitors ON vlogs.visitor_id = visitors.visitor_id
+          LEFT JOIN "VMS".vms_users users ON vlogs.visiting_user_id = users.user_id
         WHERE vlogs.manager_approval = TRUE
           AND vlogs.security_approval IS NULL
         ORDER BY vlogs.visit_date DESC;
