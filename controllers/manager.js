@@ -2,74 +2,74 @@ const db = require('../config/db');
 const { v4: uuidv4 } = require('uuid');
 
 async function findOrCreateVisitor(first_name, last_name, email, contact_number, company) {
-    const query = `
+  const query = `
         SELECT * FROM "VMS".vms_visitors
         WHERE email = $1 OR contact_number = $2
         LIMIT 1
     `;
-    const result = await db.query(query, [email, contact_number]);
+  const result = await db.query(query, [email, contact_number]);
 
-    if (result.rows.length > 0) {
-        const existingVisitor = result.rows[0];
-        const updates = [];
-        const values = [];
-        let index = 1;
+  if (result.rows.length > 0) {
+    const existingVisitor = result.rows[0];
+    const updates = [];
+    const values = [];
+    let index = 1;
 
-        if ((!existingVisitor.first_name || existingVisitor.first_name.trim() === '') && first_name) {
-            updates.push(`first_name = $${index++}`);
-            values.push(first_name);
-        }
+    if ((!existingVisitor.first_name || existingVisitor.first_name.trim() === '') && first_name) {
+      updates.push(`first_name = $${index++}`);
+      values.push(first_name);
+    }
 
-        if ((!existingVisitor.last_name || existingVisitor.last_name.trim() === '') && last_name) {
-            updates.push(`last_name = $${index++}`);
-            values.push(last_name);
-        }
+    if ((!existingVisitor.last_name || existingVisitor.last_name.trim() === '') && last_name) {
+      updates.push(`last_name = $${index++}`);
+      values.push(last_name);
+    }
 
-        if ((!existingVisitor.email || existingVisitor.email.trim() === '') && email) {
-            updates.push(`email = $${index++}`);
-            values.push(email);
-        }
+    if ((!existingVisitor.email || existingVisitor.email.trim() === '') && email) {
+      updates.push(`email = $${index++}`);
+      values.push(email);
+    }
 
-        if ((!existingVisitor.contact_number || existingVisitor.contact_number.trim() === '') && contact_number) {
-            updates.push(`contact_number = $${index++}`);
-            values.push(contact_number);
-        }
+    if ((!existingVisitor.contact_number || existingVisitor.contact_number.trim() === '') && contact_number) {
+      updates.push(`contact_number = $${index++}`);
+      values.push(contact_number);
+    }
 
-        if ((!existingVisitor.company || existingVisitor.company.trim() === '') && company) {
-            updates.push(`company = $${index++}`);
-            values.push(company);
-        }
+    if ((!existingVisitor.company || existingVisitor.company.trim() === '') && company) {
+      updates.push(`company = $${index++}`);
+      values.push(company);
+    }
 
-        if (updates.length > 0) {
-            const updateQuery = `
+    if (updates.length > 0) {
+      const updateQuery = `
                 UPDATE "VMS".vms_visitors
                 SET ${updates.join(', ')}
                 WHERE visitor_id = $${index}
             `;
-            values.push(existingVisitor.visitor_id);
-            await db.query(updateQuery, values);
-        }
-
-        return existingVisitor.visitor_id;
+      values.push(existingVisitor.visitor_id);
+      await db.query(updateQuery, values);
     }
 
-    // Create new visitor
-    const insertQuery = `
+    return existingVisitor.visitor_id;
+  }
+
+  // Create new visitor
+  const insertQuery = `
         INSERT INTO "VMS".vms_visitors (visitor_id, first_name, last_name, email, contact_number, company)
         VALUES ($1, $2, $3, $4, $5, $6)
         RETURNING visitor_id
     `;
-    const newVisitorId = uuidv4();
-    const insertResult = await db.query(insertQuery, [
-        newVisitorId,
-        first_name,
-        last_name,
-        email,
-        contact_number,
-        company
-    ]);
+  const newVisitorId = uuidv4();
+  const insertResult = await db.query(insertQuery, [
+    newVisitorId,
+    first_name,
+    last_name,
+    email,
+    contact_number,
+    company
+  ]);
 
-    return insertResult.rows[0].visitor_id;
+  return insertResult.rows[0].visitor_id;
 }
 
 
@@ -138,13 +138,13 @@ async function logVisit(req, res) {
 
 // Get all visitors
 async function getAllVisitors(req, res) {
-    try {
-        const result = await db.query('SELECT * FROM "VMS".vms_visitors ORDER BY created_at DESC');
-        res.json({ visitors: result.rows });
-    } catch (error) {
-        console.error('Error fetching visitors:', error);
-        res.status(500).json({ message: 'Internal server error' });
-    }
+  try {
+    const result = await db.query('SELECT * FROM "VMS".vms_visitors ORDER BY created_at DESC');
+    res.json({ visitors: result.rows });
+  } catch (error) {
+    console.error('Error fetching visitors:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
 }
 
 
@@ -165,6 +165,10 @@ async function getProcessedVisitRequests(req, res) {
         vlogs.visit_type,
         vlogs.purpose,
         vlogs.accompanying_persons,
+        vlogs.location,
+
+        -- 👇 Add 'Whom to Meet' field
+        CONCAT(users.first_name, ' ', users.last_name, ' (', users.designation, ')') AS whom_to_meet,
           -- Person to meet (combined name)
       CONCAT(users.first_name, ' ', users.last_name) AS meet_with,
 
@@ -198,42 +202,55 @@ async function getProcessedVisitRequests(req, res) {
 }
 
 
+
 async function getProcessedVisitLogs(req, res) {
   try {
     const { department_id, user_id } = req.user;
+    const { start, end } = req.query;
+    const dateFilter = `AND DATE(visit_date) BETWEEN $3 AND $4`;
+
 
     const query = `
-      SELECT 
-        vlogs.visit_id AS visit_log_id,
-        visitors.first_name,
-        visitors.last_name,
-        visitors.email AS company_email,
-        visitors.company AS company,
-        visitors.contact_number as contact,
-        vlogs.department_id,
-        vlogs.visit_date,
-        vlogs.visit_type,
-        vlogs.purpose,
-        vlogs.accompanying_persons,
+        SELECT 
+          vlogs.visit_id AS visit_log_id,
+          visitors.first_name,
+          visitors.last_name,
+          visitors.email AS company_email,
+          visitors.company AS company,
+          visitors.contact_number as contact,
+          vlogs.department_id,
+          vlogs.visit_date,
+          vlogs.visit_type,
+          vlogs.purpose,
+          vlogs.accompanying_persons,
+          vlogs.check_in_time,
+          vlogs.check_out_time,
+          vlogs.security_data,
+          vlogs.location,
+          vlogs.visitor_type,
+          CONCAT(users.first_name, ' ', users.last_name, ' (', users.designation, ')') AS whom_to_meet,
           -- Person to meet (combined name)
       CONCAT(users.first_name, ' ', users.last_name) AS meet_with,
 
-        -- Status derived from manager and security approvals
-        CASE
-          WHEN vlogs.manager_approval = TRUE AND vlogs.security_approval = TRUE THEN 'Approved'
-          WHEN vlogs.manager_approval = FALSE OR vlogs.security_approval = FALSE THEN 'Rejected'
-          ELSE 'Pending'
-        END AS status
+          -- Status derived from manager and security approvals
+          CASE
+            WHEN vlogs.manager_approval = TRUE AND vlogs.security_approval = TRUE THEN 'Approved'
+            WHEN vlogs.manager_approval = FALSE OR vlogs.security_approval = FALSE THEN 'Rejected'
+            ELSE 'Pending'
+          END AS status
 
-      FROM "VMS".vms_visit_logs vlogs
-      INNER JOIN "VMS".vms_visitors visitors ON vlogs.visitor_id = visitors.visitor_id
-       LEFT JOIN "VMS".vms_users users ON vlogs.visiting_user_id = users.user_id
+        FROM "VMS".vms_visit_logs vlogs
+        INNER JOIN "VMS".vms_visitors visitors ON vlogs.visitor_id = visitors.visitor_id
+        LEFT JOIN "VMS".vms_users users ON vlogs.visiting_user_id = users.user_id
+         LEFT JOIN "VMS".vms_users users ON vlogs.visiting_user_id = users.user_id
       WHERE vlogs.department_id = $1
-        AND vlogs.visiting_user_id = $2
-      ORDER BY vlogs.visit_date DESC;
-    `;
+          AND vlogs.visiting_user_id = $2
+          AND DATE(vlogs.visit_date) BETWEEN $3 AND $4
+        ORDER BY vlogs.visit_date DESC;
+      `;
 
-    const result = await db.query(query, [department_id, user_id]);
+
+    const result = await db.query(query, [department_id, user_id, start, end]);
 
     res.status(200).json({
       message: 'Filtered unplanned visit logs fetched successfully',
@@ -248,11 +265,14 @@ async function getProcessedVisitLogs(req, res) {
 async function getManagerVisitAnalytics(req, res) {
   try {
     const managerId = req.user.user_id;
+    const { start, end } = req.query;
+    const dateFilter = `AND DATE(visit_date) BETWEEN $2 AND $3`;
 
     const totalLogsQuery = `
       SELECT COUNT(*) AS total_logs
       FROM "VMS".vms_visit_logs
       WHERE visiting_user_id = $1
+      ${dateFilter}
     `;
 
     const pendingApprovalsQuery = `
@@ -260,6 +280,7 @@ async function getManagerVisitAnalytics(req, res) {
       FROM "VMS".vms_visit_logs
       WHERE visiting_user_id = $1
       AND (manager_approval IS NULL OR manager_approval = FALSE)
+      ${dateFilter}
     `;
 
     const currentlyCheckedInQuery = `
@@ -279,6 +300,8 @@ async function getManagerVisitAnalytics(req, res) {
         COUNT(*) FILTER (WHERE manager_approval IS NULL) AS pending_count
       FROM "VMS".vms_visit_logs
       WHERE visiting_user_id = $1
+      ${dateFilter}
+
     `;
 
     const typeCountsQuery = `
@@ -287,6 +310,8 @@ async function getManagerVisitAnalytics(req, res) {
         COUNT(*) FILTER (WHERE visit_type = 'unplanned') AS unplanned_count
       FROM "VMS".vms_visit_logs
       WHERE visiting_user_id = $1
+      ${dateFilter}
+
     `;
 
     const checkedInUserDetailsQuery = `
@@ -316,11 +341,11 @@ async function getManagerVisitAnalytics(req, res) {
       typeCountsResult,
       checkedInUserDetailsResult
     ] = await Promise.all([
-      db.query(totalLogsQuery, [managerId]),
-      db.query(pendingApprovalsQuery, [managerId]),
+      db.query(totalLogsQuery, [managerId, start, end]),
+      db.query(pendingApprovalsQuery, [managerId, start, end]),
       db.query(currentlyCheckedInQuery, [managerId]),
-      db.query(approvalCountsQuery, [managerId]),
-      db.query(typeCountsQuery, [managerId]),
+      db.query(approvalCountsQuery, [managerId, start, end]),
+      db.query(typeCountsQuery, [managerId, start, end]),
       db.query(checkedInUserDetailsQuery, [managerId])
     ]);
 
@@ -347,7 +372,7 @@ async function approveVisitByManager(req, res) {
   try {
     const { visit_id } = req.params;
     const { approval } = req.body;
-    
+
 
     if (typeof approval !== "boolean") {
       return res.status(400).json({ message: "Approval must be true or false" });
@@ -444,11 +469,11 @@ async function approveExitByManager(req, res) {
 
 
 module.exports = {
-    logVisit,
-    getAllVisitors,
-    getProcessedVisitLogs,
-    getProcessedVisitRequests,
-    getManagerVisitAnalytics,
-    approveVisitByManager,
-    approveExitByManager
+  logVisit,
+  getAllVisitors,
+  getProcessedVisitLogs,
+  getProcessedVisitRequests,
+  getManagerVisitAnalytics,
+  approveVisitByManager,
+  approveExitByManager
 };
