@@ -99,6 +99,7 @@ async function getSecurityVisitAnalytics(req, res) {
         vvl.check_in_time AS "visitDate",
         vvl.purpose,
         vvl.accompanying_persons,
+        manager_exit_approval,
         CASE 
           WHEN vvl.check_in_time IS NOT NULL AND vvl.check_out_time IS NULL THEN 'Checked In'
           WHEN vvl.check_in_time IS NOT NULL AND vvl.check_out_time IS NOT NULL THEN 'Checked Out'
