@@ -169,8 +169,6 @@ async function getProcessedVisitRequests(req, res) {
 
         -- 👇 Add 'Whom to Meet' field
         CONCAT(users.first_name, ' ', users.last_name, ' (', users.designation, ')') AS whom_to_meet,
-          -- Person to meet (combined name)
-      CONCAT(users.first_name, ' ', users.last_name) AS meet_with,
 
         -- Status derived from manager and security approvals
         CASE
@@ -319,9 +317,14 @@ async function getManagerVisitAnalytics(req, res) {
         vv.email AS visitor_email,
         vu.first_name AS visiting_user_first_name,
         vu.last_name AS visiting_user_last_name,
+        vu.designation AS visiting_user_designation,
         vvl.check_in_time AS "visitDate",
-         vvl.purpose,
+        vvl.purpose,
         vvl.accompanying_persons,
+        vvl.location,
+        vvl.visit_type,
+        vvl.visitor_type,
+        vvl.security_data,
         CASE 
           WHEN vvl.check_in_time IS NOT NULL AND vvl.check_out_time IS NULL THEN 'Checked In'
           WHEN vvl.check_in_time IS NOT NULL AND vvl.check_out_time IS NOT NULL THEN 'Checked Out'
