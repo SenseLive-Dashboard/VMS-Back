@@ -221,10 +221,49 @@ async function updateUser(req, res) {
 }
 
 
+//create api for change password
+async function changePassword(req, res) {
+    try {
+        const { oldPassword, newPassword ,confirmPassword} = req.body;
+        const userId = req.user.user_id; // Assuming user ID is in the token
+
+        if(newPassword !== confirmPassword) {
+            return res.status(400).json({ message: 'New password and confirmation do not match.' });
+        }
+
+        // Fetch the user's current password hash from the database
+        const query = `SELECT password_hash FROM "VMS".vms_users WHERE user_id = $1`;
+        const result = await db.query(query, [userId]);
+
+        if (result.rowCount === 0) {
+            return res.status(404).json({ message: 'User not found.' });
+        }
+
+        const user = result.rows[0];
+
+        // Compare the old password with the stored hash
+        const match = await bcrypt.compare(oldPassword, user.password_hash);
+        if (!match) {
+            return res.status(401).json({ message: 'Old password is incorrect.' });
+        }
+
+        // Hash the new password and update it in the database
+        const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+        const updateQuery = `UPDATE "VMS".vms_users SET password_hash = $1 WHERE user_id = $2`;
+        await db.query(updateQuery, [hashedNewPassword, userId]);
+
+        res.status(200).json({ message: 'Password changed successfully.' });
+    } catch (error) {
+        console.error('Error changing password:', error);
+        res.status(500).json({ message: 'Internal server error.' });
+    }
+}
+
 module.exports = {
     register,
     login,
     getUserDetails,
     updateUser,
-    getUser
+    getUser,
+    changePassword,
 };
