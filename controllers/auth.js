@@ -221,16 +221,13 @@ async function updateUser(req, res) {
 }
 
 
-//create api for change password
+//api for change password
 async function changePassword(req, res) {
     try {
         const { oldPassword, newPassword ,confirmPassword} = req.body;
         const userId = req.user.user_id; // Assuming user ID is in the token
 
-        if(newPassword !== confirmPassword) {
-            return res.status(400).json({ message: 'New password and confirmation do not match.' });
-        }
-
+    
         // Fetch the user's current password hash from the database
         const query = `SELECT password_hash FROM "VMS".vms_users WHERE user_id = $1`;
         const result = await db.query(query, [userId]);
